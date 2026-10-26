@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BookX - College Book Exchange</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,Arial,sans-serif;background:#f3f4f6;color:#111}
+header{background:#131921;color:#fff;display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 16px;position:sticky;top:0;z-index:5}
+header b{font-size:22px;color:#febd69;margin-right:auto}
+button,.btn{background:#febd69;border:0;border-radius:6px;padding:8px 12px;cursor:pointer;font-weight:600}
+button.sec{background:#e5e7eb}button.red{background:#ef4444;color:#fff}button.grn{background:#22c55e;color:#fff}
+header button{background:transparent;color:#fff;border:1px solid #475569}header button.on{background:#febd69;color:#111}
+main{max-width:1100px;margin:16px auto;padding:0 12px}
+.bar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+input,select,textarea{padding:9px;border:1px solid #cbd5e1;border-radius:6px;font:inherit;width:100%}
+.bar input{flex:1;min-width:180px;width:auto}.bar select{width:auto}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
+.card{background:#fff;border-radius:10px;overflow:hidden;cursor:pointer;box-shadow:0 1px 3px #0002}
+.cover{height:130px;display:flex;align-items:center;justify-content:center;font-size:54px}
+.card .in{padding:10px}.card h4{margin:0 0 4px;font-size:15px}.muted{color:#64748b;font-size:13px}
+.tag{display:inline-block;padding:2px 8px;border-radius:99px;font-size:12px;font-weight:700;color:#fff}
+.sell{background:#2563eb}.rent{background:#d97706}.exchange{background:#16a34a}
+.price{font-weight:800;font-size:17px;margin-top:4px}
+.box{background:#fff;border-radius:10px;padding:14px;margin-bottom:12px;box-shadow:0 1px 3px #0002}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+#modal{position:fixed;inset:0;background:#0007;display:none;align-items:center;justify-content:center;z-index:9;padding:12px}
+#modal>div{background:#fff;border-radius:12px;padding:18px;max-width:480px;width:100%;max-height:90vh;overflow:auto}
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#111;color:#fff;padding:10px 16px;border-radius:8px;display:none;z-index:99}
+.auth{max-width:400px;margin:40px auto}.auth label{display:block;margin:10px 0 4px;font-weight:600;font-size:14px}
+.msg{padding:6px 10px;border-radius:8px;margin:4px 0;background:#e5e7eb;max-width:85%}.msg.me{background:#fde68a;margin-left:auto}
+.badge{background:#ef4444;color:#fff;border-radius:99px;padding:0 6px;font-size:12px;margin-left:4px}
+</style></head><body>
+<div id="app"></div><div id="modal" onclick="if(event.target==this)closeM()"><div id="mbox"></div></div><div id="toast"></div>
+<script>
+const $=s=>document.querySelector(s);
+const L=(k,d)=>{try{const v=JSON.parse(localStorage.getItem(k));return v==null?d:v}catch(e){return d}};
+const S=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+const CATS=['Engineering','Medical','Science','Commerce','Arts','Law','Competitive Exams','Novels','Other'];
+let users=L('bx_users',null),books=L('bx_books',null),reqs=L('bx_reqs',[]),me=L('bx_me',null);
+let view='browse',A={tab:'login',type:'college'},F={q:'',mode:'all',cat:'all',sort:'new'};
+if(!users){users={demo1:{id:'demo1',name:'Aarav Sharma',pass:btoa('demo123'),type:'college',college:'Demo College',phone:'9000000001'},
+demo2:{id:'demo2',name:'Priya Verma',pass:btoa('demo123'),type:'college',college:'Demo College',phone:'9000000002'}};S('bx_users',users)}
+const mk=(title,author,cat,cond,mode,price,wanted,owner,emoji)=>({id:uid(),title,author,cat,cond,mode,price,wanted,desc:'',owner,emoji,status:'available',t:Date.now()});
+if(!books){books=[mk('Engineering Mathematics','B.S. Grewal','Engineering','Good','sell',350,'','demo1','📘'),
+mk('Concepts of Physics','H.C. Verma','Science','Like new','rent',40,'','demo1','⚛️'),
+mk('Data Structures in C','Reema Thareja','Engineering','Fair','exchange',0,'Any DBMS book','demo2','💻'),
+mk('Gray\'s Anatomy','Henry Gray','Medical','Good','sell',900,'','demo2','🩺'),
+mk('Principles of Economics','Mankiw','Commerce','Good','rent',60,'','demo2','📈'),
+mk('Wings of Fire','A.P.J. Abdul Kalam','Novels','Like new','exchange',0,'Any novel','demo1','🚀')];S('bx_books',books)}
+const save=()=>{S('bx_users',users);S('bx_books',books);S('bx_reqs',reqs);S('bx_me',me)};
+const toast=m=>{const t=$('#toast');t.textContent=m;t.style.display='block';clearTimeout(t.h);t.h=setTimeout(()=>t.style.display='none',2500)};
+const openM=h=>{$('#mbox').innerHTML=h;$('#modal').style.display='flex'};
+const closeM=()=>{$('#modal').style.display='none'};
+const col=s=>{let h=0;for(const c of s)h=(h*31+c.charCodeAt(0))%360;return `linear-gradient(135deg,hsl(${h},70%,85%),hsl(${(h+40)%360},70%,75%))`};
+const ptxt=b=>b.mode=='sell'?'₹'+b.price:b.mode=='rent'?'₹'+b.price+'/week':'Exchange';
+const uname=i=>users[i]?users[i].name:i;
+const date=t=>new Date(t).toLocaleDateString();
+
+/* ---------- AUTH ---------- */
+function authHTML(){const c=A.type=='college',s=A.tab=='signup';
+return `<div class="auth box"><h2 style="margin-top:0">📚 BookX</h2><p class="muted">Buy, rent & exchange books with your college mates.</p>
+<div class="row"><button class="${A.tab=='login'?'':'sec'}" onclick="A.tab='login';render()">Login</button><button class="${s?'':'sec'}" onclick="A.tab='signup';render()">Sign up</button></div>
+<div class="row" style="margin-top:10px"><label><input type="radio" style="width:auto" ${c?'checked':''} onclick="A.type='college';render()"> College ID</label>
+<label><input type="radio" style="width:auto" ${!c?'checked':''} onclick="A.type='external';render()"> Other ID (no college)</label></div>
+${s?`<label>Full name</label><input id="a_name">`:''}
+<label>${c?'College ID / Roll No':'Email or phone'}</label><input id="a_id" autocapitalize="off">
+${s&&c?`<label>College name</label><input id="a_col">`:''}
+${s?`<label>Phone (shown only after a deal is accepted)</label><input id="a_ph">`:''}
+<label>Password</label><input id="a_pw" type="password" onkeydown="if(event.key=='Enter')${s?'signup()':'login()'}">
+<p><button onclick="${s?'signup()':'login()'}">${s?'Create account':'Login'}</button></p>
+<p class="muted">Demo: ID <b>demo1</b> / password <b>demo123</b> (or demo2)</p></div>`}
+function login(){const id=$('#a_id').value.trim().toLowerCase(),u=users[id];
+if(!u||u.pass!==btoa($('#a_pw').value))return toast('Wrong ID or password');me=u.id;save();view='browse';render()}
+function signup(){const id=$('#a_id').value.trim().toLowerCase(),name=$('#a_name').value.trim(),pw=$('#a_pw').value;
+if(!/^[\w@.+\-]{3,40}$/.test(id))return toast('ID: 3-40 chars, letters/numbers/@ . _ - +');
+if(!name||pw.length<4)return toast('Enter name and a 4+ char password');
+if(users[id])return toast('This ID is already registered');
+users[id]={id,name,pass:btoa(pw),type:A.type,college:A.type=='college'?($('#a_col').value.trim()||'My College'):'',phone:$('#a_ph').value.trim()};
+me=id;save();view='browse';render();toast('Welcome '+name)}
+function logout(){me=null;save();render()}
+
+/* ---------- BROWSE ---------- */
+function gridHTML(){let l=books.filter(b=>b.status=='available'&&(F.mode=='all'||b.mode==F.mode)&&(F.cat=='all'||b.cat==F.cat)&&(b.title+' '+b.author+' '+b.cat).toLowerCase().includes(F.q.toLowerCase()));
+if(F.sort=='low')l.sort((a,b)=>a.price-b.price);else if(F.sort=='high')l.sort((a,b)=>b.price-a.price);else l.sort((a,b)=>b.t-a.t);
+if(!l.length)return '<p class="muted">No books found.</p>';
+return l.map(b=>`<div class="card" onclick="openBook('${b.id}')"><div class="cover" style="background:${col(b.title)}">${esc(b.emoji)}</div><div class="in">
+<span class="tag ${b.mode}">${b.mode.toUpperCase()}</span><h4>${esc(b.title)}</h4><div class="muted">${esc(b.author)} · ${esc(b.cond)}</div>
+<div class="price">${ptxt(b)}</div><div class="muted">by ${esc(uname(b.owner))}${b.owner==me?' (you)':''}</div></div></div>`).join('')}
+function grid(){F.q=$('#q').value;F.mode=$('#fm').value;F.cat=$('#fc').value;F.sort=$('#fs').value;$('#grid').innerHTML=gridHTML()}
+const vBrowse=()=>`<div class="bar"><input id="q" placeholder="🔍 Search title, author, subject..." value="${esc(F.q)}" oninput="grid()">
+<select id="fm" onchange="grid()">${[['all','All types'],['sell','Buy'],['rent','Rent'],['exchange','Exchange']].map(x=>`<option value="${x[0]}" ${F.mode==x[0]?'selected':''}>${x[1]}</option>`).join('')}</select>
+<select id="fc" onchange="grid()"><option value="all">All subjects</option>${CATS.map(c=>`<option ${F.cat==c?'selected':''}>${c}</option>`).join('')}</select>
+<select id="fs" onchange="grid()">${[['new','Newest'],['low','Price: low to high'],['high','Price: high to low']].map(x=>`<option value="${x[0]}" ${F.sort==x[0]?'selected':''}>${x[1]}</option>`).join('')}</select></div>
+<div id="grid" class="grid">${gridHTML()}</div>`;
+
+/* ---------- BOOK DETAIL + REQUESTS ---------- */
+function openBook(id){const b=books.find(x=>x.id==id),o=users[b.owner]||{};let act='';
+if(b.owner==me)act='<p class="muted">This is your listing.</p>';
+else if(b.mode=='sell')act=`<button onclick="req('${id}','buy')">Request to buy ₹${b.price}</button>`;
+else if(b.mode=='rent')act=`<div class="row"><input id="wk" type="number" min="1" max="26" value="1" style="width:90px"> weeks <button onclick="req('${id}','rent')">Request rent (₹${b.price}/week)</button></div>`;
+else{const mine=books.filter(x=>x.owner==me&&x.status=='available');
+act=mine.length?`<label>Offer one of your books:</label><select id="off">${mine.map(x=>`<option value="${x.id}">${esc(x.title)}</option>`).join('')}</select><p><button onclick="req('${id}','exchange')">Propose exchange</button></p>`:'<p class="muted">List one of your books first to propose an exchange.</p>'}
+openM(`<div class="cover" style="background:${col(b.title)};border-radius:8px">${esc(b.emoji)}</div><h3>${esc(b.title)}</h3>
+<p><span class="tag ${b.mode}">${b.mode.toUpperCase()}</span> <b>${ptxt(b)}</b></p>
+<p class="muted">${esc(b.author)} · ${esc(b.cat)} · Condition: ${esc(b.cond)}</p>
+${b.mode=='exchange'?`<p>Wants in return: <b>${esc(b.wanted||'Any book')}</b></p>`:''}${b.desc?`<p>${esc(b.desc)}</p>`:''}
+<p class="muted">Listed by <b>${esc(o.name||b.owner)}</b> · ${o.type=='college'?'🎓 '+esc(o.college):'External user'}</p>${act}<p><button class="sec" onclick="closeM()">Close</button></p>`)}
+function req(bid,kind){const b=books.find(x=>x.id==bid);
+if(reqs.some(x=>x.bookId==bid&&x.from==me&&x.status=='pending'))return toast('You already have a pending request');
+const r={id:uid(),bookId:bid,from:me,to:b.owner,kind,status:'pending',msgs:[],t:Date.now()};
+if(kind=='rent')r.weeks=Math.max(1,Math.min(26,+$('#wk').value||1));
+if(kind=='exchange'){r.offer=$('#off').value}
+reqs.push(r);save();closeM();view='requests';render();toast('Request sent to '+uname(b.owner))}
+function decide(id,ok){const r=reqs.find(x=>x.id==id),b=books.find(x=>x.id==r.bookId);
+if(ok){if(b.status!='available')return toast('Book is no longer available');
+if(r.kind=='buy'){b.status='sold';b.buyer=r.from}
+if(r.kind=='rent'){b.status='rented';b.renter=r.from;b.due=Date.now()+r.weeks*6048e5}
+if(r.kind=='exchange'){const o=books.find(x=>x.id==r.offer);if(!o||o.status!='available'||o.owner!=r.from)return toast('Offered book is not available');
+[b.owner,o.owner]=[o.owner,b.owner];b.status=o.status='unlisted'}
+r.status='accepted';const ids=[b.id,r.offer].filter(Boolean);
+reqs.forEach(x=>{if(x!==r&&x.status=='pending'&&(ids.includes(x.bookId)||ids.includes(x.offer)))x.status='rejected'});toast('Accepted! Chat to arrange the handover.')}
+else{r.status='rejected'}save();render()}
+function cancelReq(id){reqs.find(x=>x.id==id).status='cancelled';save();render()}
+function chat(id){const r=reqs.find(x=>x.id==id),b=books.find(x=>x.id==r.bookId),other=r.from==me?r.to:r.from,u=users[other]||{};
+openM(`<h3>${esc(b.title)}</h3><p class="muted">Chat with <b>${esc(u.name||other)}</b> (ID: ${esc(other)})</p>
+${r.status=='accepted'?`<p>📞 Contact: <b>${esc(u.phone||'not provided')}</b></p>`:''}
+<div id="msgs">${r.msgs.map(m=>`<div class="msg ${m.f==me?'me':''}">${esc(m.x)}<div class="muted">${date(m.t)}</div></div>`).join('')||'<p class="muted">No messages yet.</p>'}</div>
+<div class="row" style="margin-top:8px"><input id="cm" placeholder="Type a message..." style="flex:1;width:auto" onkeydown="if(event.key=='Enter')sendMsg('${id}')"><button onclick="sendMsg('${id}')">Send</button></div>
+<p><button class="sec" onclick="closeM();render()">Close</button></p>`)}
+function sendMsg(id){const v=$('#cm').value.trim();if(!v)return;reqs.find(x=>x.id==id).msgs.push({f:me,x:v,t:Date.now()});save();chat(id)}
+function reqCard(r,inc){const b=books.find(x=>x.id==r.bookId)||{title:'(deleted)'},o=books.find(x=>x.id==r.offer),other=inc?r.from:r.to;
+const what=r.kind=='buy'?'Buy for ₹'+b.price:r.kind=='rent'?`Rent ${r.weeks} week(s) = ₹${b.price*r.weeks}`:`Exchange for "${esc(o?o.title:'?')}"`;
+return `<div class="box"><div class="row"><b>${esc(b.title)}</b><span class="tag ${r.kind=='buy'?'sell':r.kind}">${r.kind.toUpperCase()}</span><span class="muted">${r.status.toUpperCase()}</span></div>
+<p>${inc?'From':'To'}: <b>${esc(uname(other))}</b> · ${what}</p><div class="row">
+${inc&&r.status=='pending'?`<button class="grn" onclick="decide('${r.id}',true)">Accept</button><button class="red" onclick="decide('${r.id}',false)">Reject</button>`:''}
+${!inc&&r.status=='pending'?`<button class="sec" onclick="cancelReq('${r.id}')">Cancel</button>`:''}
+<button class="sec" onclick="chat('${r.id}')">💬 Chat (${r.msgs.length})</button></div></div>`}
+const vReq=()=>{const inc=reqs.filter(r=>r.to==me).reverse(),out=reqs.filter(r=>r.from==me).reverse();
+return `<h3>Incoming requests</h3>${inc.map(r=>reqCard(r,true)).join('')||'<p class="muted">None yet.</p>'}<h3>My requests</h3>${out.map(r=>reqCard(r,false)).join('')||'<p class="muted">None yet.</p>'}`};
+
+/* ---------- ADD / MY BOOKS ---------- */
+const vAdd=()=>`<div class="box" style="max-width:520px"><h3 style="margin-top:0">List a book</h3>
+<label>Title</label><input id="n_t"><label>Author</label><input id="n_a">
+<div class="row"><div style="flex:1"><label>Subject</label><select id="n_c">${CATS.map(c=>`<option>${c}</option>`).join('')}</select></div>
+<div style="flex:1"><label>Condition</label><select id="n_d"><option>Like new</option><option>Good</option><option>Fair</option><option>Worn</option></select></div></div>
+<label>I want to</label><select id="n_m" onchange="$('#n_pw').style.display=this.value=='exchange'?'none':'block';$('#n_ww').style.display=this.value=='exchange'?'block':'none';$('#n_pl').textContent=this.value=='rent'?'Rent per week (₹)':'Price (₹)'">
+<option value="sell">Sell</option><option value="rent">Rent out</option><option value="exchange">Exchange</option></select>
+<div id="n_pw"><label id="n_pl">Price (₹)</label><input id="n_p" type="number" min="0"></div>
+<div id="n_ww" style="display:none"><label>What book do you want in return?</label><input id="n_w" placeholder="e.g. Any DBMS book"></div>
+<label>Notes (edition, year, etc.)</label><textarea id="n_n" rows="2"></textarea>
+<p><button onclick="addBook()">List book</button></p></div>`;
+function addBook(){const t=$('#n_t').value.trim(),m=$('#n_m').value,p=+$('#n_p').value||0;
+if(!t)return toast('Enter a title');if(m!='exchange'&&p<=0)return toast('Enter a price');
+const em={Engineering:'💻',Medical:'🩺',Science:'⚛️',Commerce:'📈',Arts:'🎨',Law:'⚖️','Competitive Exams':'🎯',Novels:'📖',Other:'📚'}[$('#n_c').value];
+const b=mk(t,$('#n_a').value.trim()||'Unknown',$('#n_c').value,$('#n_d').value,m,m=='exchange'?0:p,$('#n_w').value.trim(),me,em);b.desc=$('#n_n').value.trim();
+books.push(b);save();view='mine';render();toast('Book listed!')}
+function delBook(id){if(!confirm('Delete this listing?'))return;books=books.filter(b=>b.id!=id);save();render()}
+function relist(id){const b=books.find(x=>x.id==id);b.status='available';b.renter=b.buyer=null;save();render()}
+const vMine=()=>{const my=books.filter(b=>b.owner==me),got=books.filter(b=>b.buyer==me||b.renter==me);
+return `<h3>My books</h3>${my.map(b=>`<div class="box"><div class="row"><b>${esc(b.title)}</b><span class="tag ${b.mode}">${b.mode.toUpperCase()}</span><span>${ptxt(b)}</span><span class="muted">${b.status.toUpperCase()}${b.renter?' to '+esc(uname(b.renter))+' until '+date(b.due):''}${b.buyer?' to '+esc(uname(b.buyer)):''}</span></div>
+<div class="row" style="margin-top:8px">${b.status!='available'?`<button class="grn" onclick="relist('${b.id}')">${b.status=='rented'?'Mark returned':'Relist'}</button>`:''}<button class="red" onclick="delBook('${b.id}')">Delete</button></div></div>`).join('')||'<p class="muted">You have no books listed.</p>'}
+<h3>Books I bought / rented</h3>${got.map(b=>`<div class="box"><b>${esc(b.title)}</b> · ${b.renter==me?'Rented, return by '+date(b.due):'Bought'} from ${esc(uname(b.owner))}</div>`).join('')||'<p class="muted">Nothing yet.</p>'}`};
+
+/* ---------- RENDER ---------- */
+const views={browse:vBrowse,add:vAdd,mine:vMine,requests:vReq};
+function render(){if(!me||!users[me]){me=null;$('#app').innerHTML=authHTML();return}
+const n=reqs.filter(r=>r.to==me&&r.status=='pending').length,u=users[me];
+const nb=(k,t)=>`<button class="${view==k?'on':''}" onclick="view='${k}';render()">${t}</button>`;
+$('#app').innerHTML=`<header><b>📚 BookX</b>${nb('browse','Browse')}${nb('add','+ Sell / Rent / Exchange')}${nb('mine','My Books')}
+<button class="${view=='requests'?'on':''}" onclick="view='requests';render()">Requests${n?`<span class="badge">${n}</span>`:''}</button>
+<span class="muted" style="color:#cbd5e1">${esc(u.name)} ${u.type=='college'?'🎓':''}</span><button onclick="logout()">Logout</button></header><main>${views[view]()}</main>`}
+window.addEventListener('storage',()=>{users=L('bx_users',users);books=L('bx_books',books);reqs=L('bx_reqs',reqs);if(me&&$('#modal').style.display!='flex'&&!document.activeElement.matches('input,textarea,select'))render()});
+render();
+</script></body></html>
